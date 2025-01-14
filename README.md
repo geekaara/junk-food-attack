@@ -1,4 +1,6 @@
-# Junk Food Attack: A Top-Down Shooter Game (https://junk-food-attack-website-2025-aara.s3.ap-southeast-2.amazonaws.com/index.html)
+# Junk Food Attack: A Top-Down Shooter Game
+
+## TRY: https://junk-food-attack-website-2025-aara.s3.ap-southeast-2.amazonaws.com/index.html
 
 Junk Food Attack is a browser-based top-down shooter game where players defend their health against waves of junk-food. The main aim is to make people eat healthy.
 
