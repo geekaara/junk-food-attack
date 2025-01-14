@@ -1,21 +1,24 @@
+///////////////////////////////////////////////////////////
+// gameCore.js – Real-time highest updates
+///////////////////////////////////////////////////////////
 import { ASSETS, SCREEN_WIDTH, SCREEN_HEIGHT } from "./assets.js";
+import {
+  globalHighestScore,
+  updateHighScoreIfNeeded,
+} from "./cognitoConfig.js";
 
-// The high-level game state: "MENU", "PLAYING", or "LOST"
 export let gameState = "MENU";
 
-// Frame counters, freeze timers, etc.
 export let frameCount = 0;
 let lostCount = 0;
-const LOST_FREEZE_TIME = 5 * 60; // how many frames to freeze after losing
+const LOST_FREEZE_TIME = 5 * 60;
 
-// Basic game variables
 export let level = 0;
 export let lives = 5;
 export let score = 0;
 let waveLength = 5;
 let enemySpeed = 1;
 
-// The player object
 export const player = {
   x: 300,
   y: 630,
@@ -29,10 +32,8 @@ export const player = {
   laserImg: ASSETS.laserYellow,
 };
 
-// The array of enemies
 export let enemies = [];
 
-// Keypress tracking
 export const keys = {
   ArrowLeft: false,
   ArrowRight: false,
@@ -41,7 +42,6 @@ export const keys = {
   Space: false,
 };
 
-// Enemy class
 export class Enemy {
   constructor(x, y, color) {
     this.x = x;
@@ -73,16 +73,13 @@ export class Enemy {
   }
 
   draw(ctx) {
-    // Draw the enemy ship
     ctx.drawImage(this.shipImg, this.x, this.y, this.width, this.height);
-    // Draw any lasers this enemy has fired
     this.lasers.forEach((l) => {
       ctx.drawImage(l.img, l.x, l.y);
     });
   }
 
   shoot() {
-    // Only shoot if the enemy is actually on-screen
     if (
       this.y + this.height > 0 &&
       this.y < SCREEN_HEIGHT &&
@@ -99,9 +96,6 @@ export class Enemy {
   }
 }
 
-/**
- * startGame() – Resets all stats and spawns a new wave.
- */
 export function startGame() {
   gameState = "PLAYING";
   level = 0;
@@ -110,14 +104,12 @@ export function startGame() {
   waveLength = 5;
   enemySpeed = 1;
 
-  // Reset player
   player.x = 300;
   player.y = 630;
   player.health = 100;
   player.lasers = [];
   player.laserCooldown = 0;
 
-  // Clear enemies
   enemies = [];
   lostCount = 0;
   frameCount = 0;
@@ -125,9 +117,6 @@ export function startGame() {
   newWave();
 }
 
-/**
- * newWave() – Increases difficulty and spawns a new batch of enemies.
- */
 function newWave() {
   level++;
   waveLength += 5;
@@ -140,21 +129,13 @@ function newWave() {
   }
 }
 
-/**
- * gameLoop() – Called every frame to draw/update the game.
- * @param {CanvasRenderingContext2D} ctx  - The canvas 2D context
- * @param {boolean} jerseyFontLoaded      - Whether the custom font is loaded
- * @param {Function} drawMenu            - Function to draw the main menu (used if we go back)
- */
 export function gameLoop(ctx, jerseyFontLoaded, drawMenu) {
-  // Only run if in PLAYING or LOST states
   if (gameState !== "PLAYING" && gameState !== "LOST") {
     return;
   }
 
   frameCount++;
 
-  // 1) Draw background
   if (ASSETS.background.complete) {
     ctx.drawImage(ASSETS.background, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
   } else {
@@ -162,13 +143,10 @@ export function gameLoop(ctx, jerseyFontLoaded, drawMenu) {
     ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
   }
 
-  // 2) Draw UI text in red, 50px
-  if (jerseyFontLoaded) {
-    ctx.font = "50px JerseyFont";
-  } else {
-    ctx.font = "50px Arial";
-  }
+  const mainFont = jerseyFontLoaded ? "50px JerseyFont" : "50px Arial";
+  ctx.font = mainFont;
   ctx.fillStyle = "red";
+
   ctx.fillText(`Lives: ${lives}`, 10, 50);
 
   const levelText = `Level: ${level}`;
@@ -179,23 +157,20 @@ export function gameLoop(ctx, jerseyFontLoaded, drawMenu) {
   const stWidth = ctx.measureText(scoreText).width;
   ctx.fillText(scoreText, SCREEN_WIDTH / 2 - stWidth / 2, 50);
 
-  // 3) Move & draw enemies
+  // Show "Highest: X" below the current score
+  const highText = `Highest: ${globalHighestScore}`;
+  const htWidth = ctx.measureText(highText).width;
+  ctx.fillText(highText, SCREEN_WIDTH / 2 - htWidth / 2, 110);
+
   if (gameState === "PLAYING") {
     enemies.forEach((enemy) => {
       enemy.move();
-      if (enemy.laserCooldown > 0) {
-        enemy.laserCooldown--;
-      }
-      if (Math.random() < 0.008) {
-        enemy.shoot();
-      }
+      if (enemy.laserCooldown > 0) enemy.laserCooldown--;
+      if (Math.random() < 0.008) enemy.shoot();
     });
   }
-  enemies.forEach((enemy) => {
-    enemy.draw(ctx);
-  });
+  enemies.forEach((enemy) => enemy.draw(ctx));
 
-  // 4) Remove offscreen enemies -> reduce lives
   if (gameState === "PLAYING") {
     enemies = enemies.filter((enemy) => {
       if (enemy.y > SCREEN_HEIGHT) {
@@ -206,42 +181,38 @@ export function gameLoop(ctx, jerseyFontLoaded, drawMenu) {
     });
   }
 
-  // 5) Move lasers
   if (gameState === "PLAYING") {
     moveLasers();
   }
 
-  // 6) Draw player
   drawPlayer(ctx);
 
-  // 7) Check if lost
   if (gameState === "PLAYING") {
     if (lives <= 0 || player.health <= 0) {
       gameState = "LOST";
       lostCount = 0;
+
+      // Final update to store the new record in Dynamo if it's higher
+      if (score > globalHighestScore) {
+        updateHighScoreIfNeeded(score);
+      }
     }
   }
 
-  // 8) Next wave if no enemies left
   if (gameState === "PLAYING" && enemies.length === 0) {
     newWave();
   }
 
-  // If LOST, freeze for 5 sec, then return to menu
   if (gameState === "LOST") {
     lostCount++;
-    // "You Lost!!"
-    if (jerseyFontLoaded) {
-      ctx.font = "60px JerseyFont";
-    } else {
-      ctx.font = "60px Arial";
-    }
+    const lostFont = jerseyFontLoaded ? "60px JerseyFont" : "60px Arial";
+    ctx.font = lostFont;
     ctx.fillStyle = "red";
+
     const lostLabel = "You Lost!!";
     const lw = ctx.measureText(lostLabel).width;
     ctx.fillText(lostLabel, SCREEN_WIDTH / 2 - lw / 2, 350);
 
-    // Final score
     const finalText = `Final Score: ${score}`;
     const fw = ctx.measureText(finalText).width;
     ctx.fillText(finalText, SCREEN_WIDTH / 2 - fw / 2, 420);
@@ -253,23 +224,18 @@ export function gameLoop(ctx, jerseyFontLoaded, drawMenu) {
     }
   }
 
-  // Continue the loop if still PLAYING or LOST
   if (gameState === "PLAYING" || gameState === "LOST") {
     requestAnimationFrame(() => gameLoop(ctx, jerseyFontLoaded, drawMenu));
   }
 }
 
-/**
- * moveLasers() – Moves player & enemy lasers, checks collisions.
- */
 function moveLasers() {
   // Player's lasers
   player.lasers = player.lasers.filter((laser) => {
-    laser.y -= 5; // move up
-    if (laser.y < -40) {
-      return false;
-    }
-    // Check collision with enemies
+    laser.y -= 5;
+    if (laser.y < -40) return false;
+
+    // If laser hits an enemy => increment score
     for (let i = 0; i < enemies.length; i++) {
       const e = enemies[i];
       const laserW = laser.img.width;
@@ -277,7 +243,14 @@ function moveLasers() {
       if (isColliding(laser, e, laserW, laserH, e.width, e.height)) {
         enemies.splice(i, 1);
         score++;
-        return false;
+
+        // *** Real-time highest update: if (score>globalHighestScore), update it
+        if (score > globalHighestScore) {
+          // Just update the local variable for immediate on-screen display
+          // We'll do the final DynamoDB update when the game ends
+          updateHighScoreIfNeeded(score);
+        }
+        return false; // remove this laser
       }
     }
     return true;
@@ -286,10 +259,8 @@ function moveLasers() {
   // Enemy lasers
   enemies.forEach((enemy) => {
     enemy.lasers = enemy.lasers.filter((l) => {
-      l.y += 5; // move down
-      if (l.y > SCREEN_HEIGHT + 40) {
-        return false;
-      }
+      l.y += 5;
+      if (l.y > SCREEN_HEIGHT + 40) return false;
 
       const laserW = l.img.width;
       const laserH = l.img.height;
@@ -302,18 +273,10 @@ function moveLasers() {
   });
 }
 
-/**
- * drawPlayer() – Draws the player sprite, lasers, and health bar.
- */
 function drawPlayer(ctx) {
   ctx.drawImage(ASSETS.player, player.x, player.y, player.width, player.height);
+  player.lasers.forEach((l) => ctx.drawImage(l.img, l.x, l.y));
 
-  // player's lasers
-  player.lasers.forEach((l) => {
-    ctx.drawImage(l.img, l.x, l.y);
-  });
-
-  // health bar
   const barWidth = player.width;
   const greenWidth = (barWidth * player.health) / player.maxHealth;
   ctx.fillStyle = "red";
@@ -322,9 +285,6 @@ function drawPlayer(ctx) {
   ctx.fillRect(player.x, player.y + player.height + 10, greenWidth, 10);
 }
 
-/**
- * isColliding(a, b, aW, aH, bW, bH) – AABB collision detection
- */
 function isColliding(a, b, aW, aH, bW, bH) {
   return a.x < b.x + bW && a.x + aW > b.x && a.y < b.y + bH && a.y + aH > b.y;
 }

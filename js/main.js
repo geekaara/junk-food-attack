@@ -1,3 +1,6 @@
+///////////////////////////////////////////////////////////
+// main.js – The main entry, tying everything together
+///////////////////////////////////////////////////////////
 import {
   SCREEN_WIDTH,
   SCREEN_HEIGHT,
@@ -10,9 +13,10 @@ import {
   loginState,
   currentUser,
   attemptLoginOrSignup,
+  globalHighestScore, // <-- IMPORT
 } from "./cognitoConfig.js";
 
-// 2) SETUP CANVAS
+// 1) SETUP CANVAS
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
@@ -21,9 +25,9 @@ imagesReady.then(() => {
   drawMenu();
 });
 
-// 3) DRAW MENU
+// 2) DRAW MENU
 function drawMenu() {
-  // If background is loaded
+  // Draw background (if loaded), else fill black
   if (ASSETS.background.complete) {
     ctx.drawImage(ASSETS.background, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
   } else {
@@ -31,7 +35,7 @@ function drawMenu() {
     ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
   }
 
-  // Title in red, size 70px
+  // Big red title at y=200
   const font70 = jerseyFontLoaded ? "70px JerseyFont" : "70px Arial";
   ctx.font = font70;
   ctx.fillStyle = "red";
@@ -43,16 +47,22 @@ function drawMenu() {
   if (!currentUser) {
     drawLoginForm();
   } else {
-    // If logged in, show "Hello <username>" instead
+    // If logged in, show "Hello, <username>!" + highest score
     const font40 = jerseyFontLoaded ? "40px JerseyFont" : "40px Arial";
     ctx.font = font40;
-    ctx.fillStyle = "black";
+    ctx.fillStyle = "yellow";
+
     const helloText = `Hello, ${currentUser}!`;
     const helloMetrics = ctx.measureText(helloText);
     ctx.fillText(helloText, SCREEN_WIDTH / 2 - helloMetrics.width / 2, 300);
+
+    // Show highest score below that
+    const highText = `Highest: ${globalHighestScore}`;
+    const htMetrics = ctx.measureText(highText);
+    ctx.fillText(highText, SCREEN_WIDTH / 2 - htMetrics.width / 2, 360);
   }
 
-  // Draw "Start" button
+  // Draw green "START" button
   const buttonWidth = 200;
   const buttonHeight = 60;
   const buttonX = (SCREEN_WIDTH - buttonWidth) / 2;
@@ -72,36 +82,36 @@ function drawMenu() {
 }
 
 function drawLoginForm() {
+  // Use black text & stroke for the boxes
   ctx.fillStyle = "white";
   const font30 = jerseyFontLoaded ? "30px JerseyFont" : "30px Arial";
   ctx.font = font30;
 
-  // Username label & box
-  ctx.fillStyle = "black"; // set text fill color to black
+  ctx.fillStyle = "black"; // text color
   ctx.fillText("User:", 150, 300);
-  ctx.strokeStyle = "black"; // set stroke color to black
+
+  ctx.strokeStyle = "black"; // stroke color
   ctx.strokeRect(250, 275, 300, 30);
   ctx.fillText(loginState.username, 260, 300);
 
-  // Password label & box
   ctx.fillText("Pass:", 150, 350);
   ctx.strokeRect(250, 325, 300, 30);
   ctx.fillText("*".repeat(loginState.password.length), 260, 350);
 
-  // Single "Login/Signup" button
+  // "Login/Signup" button
   ctx.fillStyle = "green";
   ctx.fillRect(300, 400, 150, 40);
   ctx.fillStyle = "white";
   ctx.font = "20px Arial";
   ctx.fillText("Login/Signup", 325, 427);
 
-  // If there's an error, show it
+  // If there's an error, show it in red
   if (loginState.error) {
     ctx.fillStyle = "red";
     ctx.fillText(loginState.error, 300, 480);
   }
 
-  // Yellow outline around selected field
+  // Yellow outline for the selected field
   if (loginState.selectedField === "username") {
     ctx.strokeStyle = "yellow";
     ctx.strokeRect(248, 273, 304, 34);
@@ -111,7 +121,7 @@ function drawLoginForm() {
   }
 }
 
-// 4) MOUSE EVENTS
+// 3) MOUSE EVENTS
 canvas.addEventListener("mousedown", async (e) => {
   if (gameState === "MENU") {
     const rect = canvas.getBoundingClientRect();
@@ -140,7 +150,7 @@ canvas.addEventListener("mousedown", async (e) => {
       }
     }
 
-    // If not logged in, check if clicked in login form
+    // If not logged in, see if user clicked in username/password boxes or "Login/Signup"
     if (!currentUser) {
       // Username box
       if (mouseX >= 250 && mouseX <= 550 && mouseY >= 275 && mouseY <= 305) {
@@ -173,7 +183,7 @@ canvas.addEventListener("mousedown", async (e) => {
   }
 });
 
-// 5) KEYBOARD EVENTS
+// 4) KEYBOARD EVENTS
 window.addEventListener("keydown", (e) => {
   if (gameState === "MENU" && !currentUser && loginState.selectedField) {
     e.preventDefault();
@@ -189,10 +199,10 @@ window.addEventListener("keydown", (e) => {
       loginState[loginState.selectedField] += e.key;
       drawMenu();
     }
-    return;
+    return; // stop normal behavior
   }
 
-  // If playing, handle normal movement
+  // If the game is playing, handle normal movement controls
   if (e.code in keys) {
     keys[e.code] = true;
   }
@@ -204,11 +214,12 @@ window.addEventListener("keyup", (e) => {
   }
 });
 
-// 6) SHOOT LOGIC
+// 5) SHOOT LOGIC (runs ~60 times/sec)
 setInterval(() => {
   import("./gameCore.js").then(({ gameState, player, keys }) => {
     if (gameState !== "PLAYING") return;
 
+    // Move left/right/up/down
     if (keys.ArrowLeft && player.x > 0) {
       player.x -= player.speed;
     }
@@ -222,16 +233,19 @@ setInterval(() => {
       player.y += player.speed;
     }
 
+    // Shoot
     if (keys.Space) {
       shootPlayerLaser();
     }
 
+    // Decrement laser cooldown
     if (player.laserCooldown > 0) {
       player.laserCooldown--;
     }
   });
 }, 1000 / 60);
 
+// This function defers importing the 'player' from gameCore to avoid circular refs
 function shootPlayerLaser() {
   import("./gameCore.js").then(({ player }) => {
     if (player.laserCooldown === 0 && player.laserImg) {

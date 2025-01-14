@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Junk Food Attack (JS Edition)</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background: #000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+      }
+      #gameCanvas {
+        border: 2px solid #fff;
+        background: #000;
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="gameCanvas" width="750" height="750"></canvas>
+    <script src="https://cdn.jsdelivr.net/npm/amazon-cognito-identity-js@6.2.0/dist/amazon-cognito-identity.min.js"></script>
+    <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1434.0.min.js"></script>
+    <script type="module" src="js/main.js"></script>
+  </body>
+</html>
